@@ -1,10 +1,25 @@
+
 name: Lint
 
 on: push
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: psf/black@stable
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Check Python formatting
+        uses: psf/black@stable
+        with:
+          version: "24.4.2"
+          options: "--check --diff"
+          src: "."
+          jupyter: false
+          use_pyproject: false
+

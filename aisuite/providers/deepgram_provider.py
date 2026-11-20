@@ -1,20 +1,21 @@
-import os
 import json
-import numpy as np
+import os
 import queue
 import threading
 import time
-from typing import Union, BinaryIO, AsyncGenerator
+from typing import AsyncGenerator, BinaryIO, Union
 
-from aisuite.provider import Provider, ASRError, Audio
+import numpy as np
+
 from aisuite.framework.message import (
-    TranscriptionResult,
-    Segment,
-    Word,
     Alternative,
     Channel,
+    Segment,
     StreamingTranscriptionChunk,
+    TranscriptionResult,
+    Word,
 )
+from aisuite.provider import ASRError, Audio, Provider
 
 
 class DeepgramProvider(Provider):
@@ -35,9 +36,7 @@ class DeepgramProvider(Provider):
         try:
             from deepgram import DeepgramClient, DeepgramClientOptions
 
-            client_options = DeepgramClientOptions(
-                api_key=self.api_key, options={"keepalive": "true"}
-            )
+            client_options = DeepgramClientOptions(api_key=self.api_key)
             self.client = DeepgramClient(self.api_key, client_options)
         except ImportError:
             raise ImportError(
@@ -89,7 +88,9 @@ class DeepgramAudio(Audio):
                 kwargs.setdefault("punctuate", True)
                 kwargs.setdefault("language", "en")
 
-                deepgram_options = PrerecordedOptions(**kwargs)
+                deepgram_options = PrerecordedOptions(
+                    **{k: v for k, v in kwargs.items() if k != "options"}
+                )
                 payload = self._prepare_audio_payload(file)
 
                 response = self.client.listen.rest.v("1").transcribe_file(
@@ -250,19 +251,15 @@ class DeepgramAudio(Audio):
             except Exception as e:
                 raise ASRError(f"Deepgram streaming transcription error: {e}")
 
-
         def _prepare_audio_payload(self, file: Union[str, BinaryIO]) -> dict:
             """Prepare audio payload for Deepgram API."""
             if isinstance(file, str):
                 with open(file, "rb") as audio_file:
                     buffer_data = audio_file.read()
+            elif hasattr(file, "read"):
+                buffer_data = file.read()
             else:
-                if hasattr(file, "read"):
-                    buffer_data = file.read()
-                else:
-                    raise ValueError(
-                        "File must be a file path string or file-like object"
-                    )
+                raise ValueError("File must be a file path string or file-like object")
             return {"buffer": buffer_data}
 
         async def _load_and_prepare_audio(
@@ -284,8 +281,6 @@ class DeepgramAudio(Audio):
                     )
 
                 if isinstance(file, str):
-                    audio_data, original_sample_rate = sf.read(file)
-                else:
                     audio_data, original_sample_rate = sf.read(file)
 
                 audio_data = np.asarray(audio_data, dtype=np.float32)
@@ -339,7 +334,6 @@ class DeepgramAudio(Audio):
                 pcm16 = (piece * 32767).astype(np.int16).tobytes()
                 connection.send(pcm16)
                 time.sleep(send_delay)  # Use synchronous sleep like reference
-
 
         def _parse_deepgram_response(self, response_dict: dict) -> TranscriptionResult:
             """Convert Deepgram API response to unified TranscriptionResult."""

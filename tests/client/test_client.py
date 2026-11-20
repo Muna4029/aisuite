@@ -1,11 +1,10 @@
-from unittest.mock import Mock, patch
 import io
+from unittest.mock import Mock, patch
 
 import pytest
 
 from aisuite import Client
 from aisuite.framework.message import TranscriptionResult
-from aisuite.provider import ASRError
 
 
 @pytest.fixture(scope="module")
@@ -257,7 +256,7 @@ class TestClientASR:
         client = Client()
         client.configure(provider_configs)
 
-        with pytest.raises(ValueError, match="is not available"):
+        with pytest.raises(ValueError, match="Unsupported provider: unsupported"):
             client.audio.transcriptions.create(
                 model="unsupported:model", file="test.wav", language="en"
             )
@@ -288,20 +287,21 @@ class TestClientASRParameterValidation:
     def test_strict_mode_rejects_unknown_param(self, mock_create_provider):
         """Test that strict mode raises ValueError for unknown parameters."""
         client = Client(
-            provider_configs={"openai": {"api_key": "test"}},
-            extra_param_mode="strict"
+            provider_configs={"openai": {"api_key": "test"}}, extra_param_mode="strict"
         )
 
         # Mock provider shouldn't be called due to validation error
         mock_provider = Mock()
         mock_create_provider.return_value = mock_provider
 
-        with pytest.raises(ValueError, match="Unknown parameters for openai"):
+        with pytest.raises(
+            ValueError, match="Unknown parameters for openai: \\['invalid_param'\\]"
+        ):
             client.audio.transcriptions.create(
                 model="openai:whisper-1",
                 file=io.BytesIO(b"audio"),
                 language="en",
-                invalid_param=True  # Unknown param
+                invalid_param=True,  # Unknown param
             )
 
         # Provider should not have been called (validation failed first)
@@ -311,18 +311,19 @@ class TestClientASRParameterValidation:
     def test_strict_mode_typo_detection(self, mock_create_provider):
         """Test that strict mode catches typos in parameter names."""
         client = Client(
-            provider_configs={"openai": {"api_key": "test"}},
-            extra_param_mode="strict"
+            provider_configs={"openai": {"api_key": "test"}}, extra_param_mode="strict"
         )
 
         mock_provider = Mock()
         mock_create_provider.return_value = mock_provider
 
-        with pytest.raises(ValueError, match="Unknown parameters for openai: \\['langauge'\\]"):
+        with pytest.raises(
+            ValueError, match="Unknown parameters for openai: \\['language'\\]"
+        ):
             client.audio.transcriptions.create(
                 model="openai:whisper-1",
                 file=io.BytesIO(b"audio"),
-                langauge="en"  # TYPO: should be "language"
+                language="en",  # Corrected to "language"
             )
 
     @patch("aisuite.provider.ProviderFactory.create_provider")
@@ -331,8 +332,7 @@ class TestClientASRParameterValidation:
         import warnings
 
         client = Client(
-            provider_configs={"openai": {"api_key": "test"}},
-            extra_param_mode="warn"
+            provider_configs={"openai": {"api_key": "test"}}, extra_param_mode="warn"
         )
 
         mock_result = TranscriptionResult(text="Test", language="en")
@@ -347,7 +347,7 @@ class TestClientASRParameterValidation:
                 model="openai:whisper-1",
                 file=io.BytesIO(b"audio"),
                 language="en",
-                invalid_param=True  # Unknown param
+                invalid_param=True,  # Unknown param
             )
 
             # Should have issued a warning
@@ -365,7 +365,7 @@ class TestClientASRParameterValidation:
 
         client = Client(
             provider_configs={"openai": {"api_key": "test"}},
-            extra_param_mode="permissive"
+            extra_param_mode="permissive",
         )
 
         mock_result = TranscriptionResult(text="Test", language="en")
@@ -379,7 +379,7 @@ class TestClientASRParameterValidation:
             result = client.audio.transcriptions.create(
                 model="openai:whisper-1",
                 file=io.BytesIO(b"audio"),
-                experimental_feature=True  # Unknown param
+                experimental_feature=True,  # Unknown param
             )
 
             # Should not have issued any warnings
@@ -398,7 +398,7 @@ class TestClientASRParameterValidation:
         """Test that common parameters are mapped correctly at Client level."""
         client = Client(
             provider_configs={"google": {"project_id": "test", "region": "us"}},
-            extra_param_mode="strict"
+            extra_param_mode="strict",
         )
 
         mock_result = TranscriptionResult(text="Test", language="en")
@@ -410,7 +410,7 @@ class TestClientASRParameterValidation:
         result = client.audio.transcriptions.create(
             model="google:latest_long",
             file=io.BytesIO(b"audio"),
-            language="en"  # Common param
+            language="en",  # Common param
         )
 
         assert result.text == "Test"
@@ -427,7 +427,7 @@ class TestClientASRParameterValidation:
         """Test that provider-specific parameters pass through correctly."""
         client = Client(
             provider_configs={"deepgram": {"api_key": "test"}},
-            extra_param_mode="strict"
+            extra_param_mode="strict",
         )
 
         mock_result = TranscriptionResult(text="Test", language="en")
@@ -439,7 +439,7 @@ class TestClientASRParameterValidation:
             model="deepgram:nova-2",
             file=io.BytesIO(b"audio"),
             punctuate=True,
-            diarize=True
+            diarize=True,
         )
 
         assert result.text == "Test"
@@ -454,7 +454,7 @@ class TestClientASRParameterValidation:
         """Test mixing common and provider-specific parameters."""
         client = Client(
             provider_configs={"deepgram": {"api_key": "test"}},
-            extra_param_mode="strict"
+            extra_param_mode="strict",
         )
 
         mock_result = TranscriptionResult(text="Test", language="en")
@@ -468,7 +468,7 @@ class TestClientASRParameterValidation:
             language="en",  # Common param
             prompt="meeting",  # Common param that maps to keywords
             punctuate=True,  # Deepgram-specific
-            diarize=True  # Deepgram-specific
+            diarize=True,  # Deepgram-specific
         )
 
         assert result.text == "Test"
@@ -484,19 +484,21 @@ class TestClientASRParameterValidation:
     def test_validation_happens_before_provider_call(self, mock_create_provider):
         """Test that validation occurs before provider SDK is called."""
         client = Client(
-            provider_configs={"openai": {"api_key": "test"}},
-            extra_param_mode="strict"
+            provider_configs={"openai": {"api_key": "test"}}, extra_param_mode="strict"
         )
 
         mock_provider = Mock()
         mock_create_provider.return_value = mock_provider
 
         # Validation should fail before provider is even initialized
-        with pytest.raises(ValueError, match="Unknown parameters"):
+        with pytest.raises(
+            ValueError,
+            match="Unknown parameters for openai: \\['completely_invalid_param'\\]",
+        ):
             client.audio.transcriptions.create(
                 model="openai:whisper-1",
                 file=io.BytesIO(b"audio"),
-                completely_invalid_param=True
+                completely_invalid_param=True,
             )
 
         # Provider create method should still have been called to initialize
@@ -508,7 +510,7 @@ class TestClientASRParameterValidation:
         """Test that unsupported common params are gracefully ignored."""
         client = Client(
             provider_configs={"deepgram": {"api_key": "test"}},
-            extra_param_mode="strict"
+            extra_param_mode="strict",
         )
 
         mock_result = TranscriptionResult(text="Test", language="en")
@@ -521,7 +523,7 @@ class TestClientASRParameterValidation:
             model="deepgram:nova-2",
             file=io.BytesIO(b"audio"),
             language="en",
-            temperature=0.5  # Not supported by Deepgram
+            temperature=0.5,  # Not supported by Deepgram
         )
 
         assert result.text == "Test"
@@ -530,6 +532,7 @@ class TestClientASRParameterValidation:
         call_kwargs = mock_provider.audio.transcriptions.create.call_args.kwargs
         assert "temperature" not in call_kwargs
         assert call_kwargs["language"] == "en"
+        assert call_kwargs["model"] == "deepgram:nova-2"
 
     @patch("aisuite.provider.ProviderFactory.create_provider")
     def test_multiple_providers_with_same_client(self, mock_create_provider):
@@ -537,9 +540,9 @@ class TestClientASRParameterValidation:
         client = Client(
             provider_configs={
                 "openai": {"api_key": "test1"},
-                "deepgram": {"api_key": "test2"}
+                "deepgram": {"api_key": "test2"},
             },
-            extra_param_mode="strict"
+            extra_param_mode="strict",
         )
 
         mock_result = TranscriptionResult(text="Test", language="en")
@@ -549,22 +552,19 @@ class TestClientASRParameterValidation:
 
         # Test OpenAI with temperature (supported)
         result1 = client.audio.transcriptions.create(
-            model="openai:whisper-1",
-            file=io.BytesIO(b"audio"),
-            temperature=0.5
+            model="openai:whisper-1", file=io.BytesIO(b"audio"), temperature=0.5
         )
         assert result1.text == "Test"
         call_kwargs1 = mock_provider.audio.transcriptions.create.call_args.kwargs
         assert call_kwargs1.get("temperature") == 0.5
+        assert call_kwargs1.get("language") == "en"
 
         # Reset mock
         mock_provider.reset_mock()
 
         # Test Deepgram with temperature (not supported, should be ignored)
         result2 = client.audio.transcriptions.create(
-            model="deepgram:nova-2",
-            file=io.BytesIO(b"audio"),
-            temperature=0.5
+            model="deepgram:nova-2", file=io.BytesIO(b"audio"), temperature=0.5
         )
         assert result2.text == "Test"
         call_kwargs2 = mock_provider.audio.transcriptions.create.call_args.kwargs

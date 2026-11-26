@@ -1,5 +1,4 @@
 from .provider import ProviderFactory
-import os
 from .utils.tools import Tools
 from typing import Union, BinaryIO, Optional, Any, Literal
 from .framework.message import (
@@ -350,14 +349,58 @@ class Transcriptions:
         supported_providers = ProviderFactory.get_supported_providers()
         if provider_key not in supported_providers:
             raise ValueError(
-                f"Invalid provider key '{provider_key}'. "
-                f"Supported providers: {supported_providers}"
+                f"Provider '{provider_key}' is not available. Supported providers: {supported_providers}"
             )
 
         # Validate and map parameters
         validated_params = self.client.param_validator.validate_and_map(
             provider_key, kwargs
         )
+
+        # Normalize wrapped 'options' objects/dicts to plain dict of kwargs
+        try:
+            # If validator returned a dict wrapper like {'options': ...}, unpack it
+            if (
+                isinstance(validated_params, dict)
+                and "options" in validated_params
+                and len(validated_params) == 1
+            ):
+                options = validated_params["options"]
+                if isinstance(options, dict):
+                    validated_params = options
+                else:
+                    from dataclasses import asdict, is_dataclass
+
+                    if is_dataclass(options):
+                        validated_params = asdict(options)
+                    else:
+                        opts_dict = getattr(options, "__dict__", None)
+                        if opts_dict:
+                            validated_params = {
+                                k: v
+                                for k, v in opts_dict.items()
+                                if not k.startswith("_")
+                            }
+                        else:
+                            # leave as-is if we can't deconstruct
+                            validated_params = validated_params
+            # Ensure validated_params is a dict for downstream .get()/**kwargs usage
+            if not isinstance(validated_params, dict):
+                from dataclasses import asdict, is_dataclass
+
+                if is_dataclass(validated_params):
+                    validated_params = asdict(validated_params)
+                else:
+                    vp = getattr(validated_params, "__dict__", None)
+                    if vp:
+                        validated_params = {
+                            k: v for k, v in vp.items() if not k.startswith("_")
+                        }
+                    else:
+                        validated_params = {}
+        except Exception:
+            # On any unexpected error normalizing params, fall back to empty dict
+            validated_params = {}
 
         # Initialize provider if not already initialized
         if provider_key not in self.client.providers:

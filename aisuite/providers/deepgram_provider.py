@@ -33,12 +33,15 @@ class DeepgramProvider(Provider):
 
         # Initialize Deepgram client
         try:
-            from deepgram import DeepgramClient, DeepgramClientOptions
+            # Attempt to import the Deepgram client. Avoid constructing SDK-specific
+            # "options" objects here to prevent accidental propagation of unsupported
+            # keys to lower-level option constructors.
+            from deepgram import DeepgramClient
 
-            client_options = DeepgramClientOptions(
-                api_key=self.api_key, options={"keepalive": "true"}
-            )
-            self.client = DeepgramClient(self.api_key, client_options)
+            # Prefer a minimal instantiation with the API key only. If the SDK
+            # supports additional client options, they should be added explicitly
+            # and validated rather than passing a generic `options` dict.
+            self.client = DeepgramClient(self.api_key)
         except ImportError:
             raise ImportError(
                 "Deepgram SDK is required. Install it with: pip install deepgram-sdk"
@@ -81,7 +84,12 @@ class DeepgramAudio(Audio):
             This is a simple pass-through to the Deepgram API.
             """
             try:
-                from deepgram import PrerecordedOptions
+                # Sanitize kwargs to avoid passing unsupported keys to any SDK
+                # constructors or methods. In particular, callers may include a
+                # provider-level "options" key which Deepgram SDK constructors do
+                # not expect.
+                kwargs.pop("options", None)
+                kwargs.pop("utterances", None)
 
                 # Add model to params and set defaults
                 kwargs["model"] = model
@@ -89,11 +97,14 @@ class DeepgramAudio(Audio):
                 kwargs.setdefault("punctuate", True)
                 kwargs.setdefault("language", "en")
 
-                deepgram_options = PrerecordedOptions(**kwargs)
+                # Build a plain dict of options and pass them as keyword args to
+                # transcribe_file so the SDK receives individual named arguments
+                # rather than a single unexpected object.
+                deepgram_options = kwargs.copy()
                 payload = self._prepare_audio_payload(file)
 
                 response = self.client.listen.rest.v("1").transcribe_file(
-                    payload, deepgram_options
+                    payload, **deepgram_options
                 )
 
                 response_dict = (
@@ -119,7 +130,6 @@ class DeepgramAudio(Audio):
             This implementation handles audio chunking and streaming.
             """
             try:
-                from deepgram import LiveOptions
                 from deepgram.clients.listen import LiveTranscriptionEvents
 
                 # Load and prepare audio
@@ -149,15 +159,17 @@ class DeepgramAudio(Audio):
                 kwargs.setdefault("language", "en")
                 kwargs["interim_results"] = True  # Enable interim results for streaming
 
-                # Remove parameters not supported by LiveOptions (streaming)
+                # Remove parameters not supported by the streaming API handlers
                 kwargs.pop("utterances", None)
+                kwargs.pop("options", None)
 
                 # Add critical audio format parameters
                 kwargs["encoding"] = "linear16"  # PCM16 format
                 kwargs["sample_rate"] = 16000  # Match our target sample rate
                 kwargs["channels"] = 1  # Mono audio
 
-                live_options = LiveOptions(**kwargs)
+                # Use a plain dict of options and pass them as keyword args to connection.start
+                live_options = kwargs.copy()
 
                 # Create single connection for all chunks
                 connection = self.client.listen.websocket.v("1")

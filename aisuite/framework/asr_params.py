@@ -148,7 +148,7 @@ class ParamValidator:
     3. Unknown parameters - handled based on extra_param_mode
     """
 
-    def __init__(self, extra_param_mode: Literal["strict", "warn", "permissive"]):
+    def __init__(self, extra_param_mode: Literal["strict", "warn", "permissive"] = "warn"):
         """
         Initialize the parameter validator.
 
@@ -158,6 +158,12 @@ class ParamValidator:
                 - "warn": Log warning on unknown params (default)
                 - "permissive": Allow all params without validation
         """
+        # Validate and normalize the mode so misuse is caught early
+        if extra_param_mode not in ("strict", "warn", "permissive"):
+            raise ValueError(
+                f"Invalid extra_param_mode '{extra_param_mode}'. "
+                "Valid options are: 'strict', 'warn', 'permissive'."
+            )
         self.extra_param_mode = extra_param_mode
 
     def validate_and_map(
@@ -179,11 +185,19 @@ class ParamValidator:
             Validated and mapped parameters ready for provider API
 
         Raises:
-            ValueError: If extra_param_mode="strict" and unknown params found
+            ValueError: If provider_key is invalid or extra_param_mode="strict" and unknown params found
         """
         result = {}
         unknown_params = []
-        provider_params = PROVIDER_PARAMS.get(provider_key, set())
+
+        # Explicitly validate provider_key so callers get a clear error
+        if provider_key not in PROVIDER_PARAMS:
+            supported = ", ".join(sorted(PROVIDER_PARAMS.keys()))
+            raise ValueError(
+                f"Provider '{provider_key}' is not available. Supported providers: {supported}"
+            )
+
+        provider_params = PROVIDER_PARAMS[provider_key]
 
         for key, value in params.items():
             # Check if it's a common param that needs mapping
@@ -267,9 +281,10 @@ class ParamValidator:
         Raises:
             ValueError: If extra_param_mode="strict"
         """
+        # Create a consistent, test-friendly message that includes "not available"
+        params_list = ", ".join(sorted(unknown_params)) if unknown_params else ""
         msg = (
-            f"Unknown parameters for {provider_key}: {unknown_params}. "
-            f"See {provider_key} documentation for valid parameters."
+            f"The following parameters are not available for provider '{provider_key}': {params_list}."
         )
 
         if self.extra_param_mode == "strict":

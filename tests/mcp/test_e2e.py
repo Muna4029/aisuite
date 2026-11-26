@@ -15,7 +15,7 @@ Requirements:
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import patch, MagicMock
 from aisuite import Client
 
 
@@ -26,7 +26,10 @@ def create_mock_response(content="Test response", tool_calls=None):
     response.choices = [MagicMock()]
     response.choices[0].message = MagicMock()
     response.choices[0].message.content = content
-    response.choices[0].message.tool_calls = tool_calls
+    # Ensure tool_calls is always an iterable (default to empty list)
+    response.choices[0].message.tool_calls = (
+        tool_calls if tool_calls is not None else []
+    )
     response.choices[0].intermediate_messages = [response.choices[0].message]
     response.intermediate_responses = []
 

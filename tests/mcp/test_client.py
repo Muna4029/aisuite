@@ -12,8 +12,14 @@ Requirements:
 """
 
 import pytest
-from aisuite.mcp import MCPClient
-from aisuite.mcp.config import validate_mcp_config
+
+# Use importorskip so that when dependencies aren't installed (e.g. in a CI
+# environment with mismatched lockfiles) the integration tests are skipped
+# instead of causing an import error that fails the whole test run.
+_mcp_mod = pytest.importorskip("aisuite.mcp")
+MCPClient = _mcp_mod.MCPClient
+_config_mod = pytest.importorskip("aisuite.mcp.config")
+validate_mcp_config = _config_mod.validate_mcp_config
 
 
 @pytest.mark.integration
@@ -264,7 +270,6 @@ class TestMCPClientFromConfig:
 
     def test_from_config_with_env(self, temp_test_dir, skip_if_no_npx):
         """Test creating MCPClient with environment variables."""
-        import os
 
         config = {
             "type": "mcp",

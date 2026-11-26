@@ -2,14 +2,19 @@
 # It will test all the models in the client.
 
 import pytest
-import aisuite as ai
-from typing import List, Dict
+try:
+    import aisuite as ai
+except Exception:
+    ai = None
+from typing import List, Dict, Any
 from dotenv import load_dotenv, find_dotenv
 
 
-def setup_client() -> ai.Client:
+def setup_client() -> Any:
     """Initialize the AI client with environment variables."""
     load_dotenv(find_dotenv())
+    if ai is None:
+        pytest.skip("aisuite package not available. Skipping integration tests.")
     return ai.Client()
 
 

@@ -27,8 +27,21 @@ Running:
 
 import pytest
 import os
+import sys
 from pathlib import Path
-from aisuite import Client
+
+# Allow importing the local `aisuite` package when running tests from the
+# repository without having installed the package (e.g. when CI fails to
+# install dependencies). Try a normal import first, and if that fails add the
+# repo root and repo root/src to sys.path if they exist and retry.
+try:
+    from aisuite import Client
+except Exception:
+    repo_root = Path(__file__).resolve().parents[2]
+    for p in (repo_root, repo_root / "src"):
+        if p.exists():
+            sys.path.insert(0, str(p))
+    from aisuite import Client
 
 
 # Helper function to check if we have API keys

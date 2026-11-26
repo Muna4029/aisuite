@@ -7,8 +7,31 @@ directly to the tools parameter.
 """
 
 import os
-from dotenv import load_dotenv
-import aisuite as ai
+
+try:
+    from dotenv import load_dotenv
+except Exception:
+    # dotenv is optional for these examples; provide a no-op fallback so the module can be imported
+    def load_dotenv(*args, **kwargs):
+        return None
+
+
+try:
+    import aisuite as ai
+except Exception:
+    # Provide a minimal ai.Client stub that fails at instantiation with a clear message.
+    # This allows static analysis and other parts of the examples file to be imported
+    # without immediately crashing when 'aisuite' isn't installed (e.g., in CI).
+    class _ClientStub:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                "The 'aisuite' package is not installed. Install it to run these examples."
+            )
+
+    class _AIModuleStub:
+        Client = _ClientStub
+
+    ai = _AIModuleStub()
 
 # Load environment variables
 load_dotenv()
@@ -173,7 +196,27 @@ Example of explicit MCPClient:
 """
 )
 
-from aisuite.mcp import MCPClient
+try:
+    from aisuite.mcp import MCPClient
+except Exception:
+    # Provide a lightweight MCPClient stub so the examples file can be imported
+    # when 'aisuite' is not installed. Methods return safe defaults or raise
+    # clear errors when used.
+    class MCPClient:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                "The 'aisuite.mcp.MCPClient' class is not available because 'aisuite' is not installed."
+            )
+
+        def list_tools(self):
+            return []
+
+        def get_callable_tools(self):
+            return []
+
+        def close(self):
+            return None
+
 
 # Create once, reuse many times
 mcp = MCPClient(
